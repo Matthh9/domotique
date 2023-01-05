@@ -1,4 +1,5 @@
-//#include <ESP32WiFi.h>
+#include <C:/Users/matth/Documents/GitHub/domotique/libraries/variable_conf_esp/variable_conf_esp.h>
+
 #include <WiFi.h>
 #include <PubSubClient.h>
 
@@ -9,19 +10,6 @@
 #define lave_vaisselle_power 27
 #define lave_vaisselle_select 33
 #define lave_vaisselle_demi_charge 25
-
-#define USER "" //user mqtt pouvant se connecter au topic
-#define PASSWORD "" // pwd de l'user mqtt
-
-//voir si possible de transformer les variables en #define pour gagner de la place dans la mémoire
-const char* ssid = ""; //SSID du wifi
-const char* password = ""; //pwd du wifi
-const char* mqtt_server = ""; //ip/nom du serveur mqtt
-const int mqtt_port = ; //port utilisé par le serveur mqtt
-
-const char *topics[] = { "commande"
-                       };
-#define taileTopics 1
 
 
 WiFiClient espClient;
@@ -36,9 +24,9 @@ int value = 0;
 //la sortie doit être raccordée sur un relais qui permet de ferme le circuit du bouton à commander
 // input : int port : correspond au numéro du port arduino à activer
 // output : none
-void bouton(int port) {
+void bouton(int port, int temps=500) {
   digitalWrite(port, HIGH);
-  delay(600);
+  delay(temps);
   digitalWrite(port, LOW);
 }
 
@@ -101,9 +89,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
         digitalWrite(lave_vaisselle_power, HIGH);
         delay(5000);
 
+        //réinitialisation de lave vaisselle si l'ancien programme ne s'est pas fini
+        bouton(lave_vaisselle_select, 5000);
+        delay(1000);
+        
         //séquence de lancement du lave vaisselle select et demi charge
         bouton(lave_vaisselle_select);
-        delay(600);
+        delay(500);
         bouton(lave_vaisselle_demi_charge);
       } else if (message.indexOf("\"nvalue\" : 0") != -1) {
         //on éteint la prise du lave vaisselle
@@ -156,6 +148,8 @@ void reconnect() {
   }
 }
 
+
+
 void setup() {
   pinMode(FOUR, OUTPUT);
   digitalWrite(FOUR, LOW);
@@ -184,7 +178,6 @@ void setup() {
 }
 
 void loop() {
-
   if (!client.connected()) {
     reconnect();
   }
