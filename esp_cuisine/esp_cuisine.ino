@@ -3,6 +3,13 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
+WiFiClient espClient;
+PubSubClient client(espClient);
+unsigned long lastMsg = 0;
+#define MSG_BUFFER_SIZE  (50)
+char msg[MSG_BUFFER_SIZE];
+int value = 0;
+
 #define FOUR 12
 #define PLAQUE 13
 #define lave_linge_power 26
@@ -12,22 +19,18 @@
 #define lave_vaisselle_demi_charge 25
 
 
-WiFiClient espClient;
-PubSubClient client(espClient);
-unsigned long lastMsg = 0;
-#define MSG_BUFFER_SIZE	(50)
-char msg[MSG_BUFFER_SIZE];
-int value = 0;
-
 
 /**********************************************************************************
  * SECTION DES FONCTIONS
  *********************************************************************************/
 
-//fonction permettant de simuler l'appuie sur un bouton en activant pendant 600 ms une sortie du contrôleur.
-//la sortie doit être raccordée sur un relais qui permet de ferme le circuit du bouton à commander
-// input : int port : correspond au numéro du port arduino à activer
-// output : none
+/**
+ * fonction permettant de simuler l'appuie sur un bouton en activant pendant 600 ms une sortie du contrôleur.
+ * la sortie doit être raccordée sur un relais qui permet de ferme le circuit du bouton à commander
+ * input : int port : correspond au numéro du port arduino à activer
+           (optionnel, defaut 500 ms) int temps : ms a temporiser l'activation du port si pas de 
+ * output : none
+**/
 void bouton(int port, int temps=500) {
   digitalWrite(port, HIGH);
   vTaskDelay(temps / portTICK_PERIOD_MS);
@@ -35,19 +38,44 @@ void bouton(int port, int temps=500) {
 }
 
 
-void demarrage_machine(void * parameter){
+/**
+ * tache permettant de démarrer le lave vaisselle, appelé lors de la reception du bon message mqtt
+ * la fonction envoie un message mqtt de confirmation
+ * input : none
+ * output : none
+**/
+void demarrage_lave_vaisselle(void * parameter){
+  client.publish("commande", "demarrage lave vaiselle");
   //on allume la prise du lave vaisselle
   digitalWrite(lave_vaisselle_power, HIGH);
   vTaskDelay(5000 / portTICK_PERIOD_MS);
   
-  //réinitialisation de lave vaisselle si l'ancien programme ne s'est pas fini
-  bouton(lave_vaisselle_select, 5000);
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
-  
   //séquence de lancement du lave vaisselle select et demi charge
   bouton(lave_vaisselle_select);
   vTaskDelay(500 / portTICK_PERIOD_MS);
-  bouton(lave_vaisselle_demi_charge);
+  bouton(lave_vaisselle_demi_charge);   
+  
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  
+  // When you're done, call vTaskDelete. Don't forget this!
+  vTaskDelete(NULL);
+}
+
+
+/**
+ * tache permettant de démarrer la machine à laver, appelé lors de la reception du bon message mqtt
+ * la fonction envoie un message mqtt de confirmation
+ * input : none
+ * output : none
+**/
+void demarrage_machine(void * parameter){
+  client.publish("commande", "demarrage machine");
+
+  //on allume la prise de la machine
+  digitalWrite(lave_linge_power, HIGH);
+  vTaskDelay(5000 / portTICK_PERIOD_MS);
+  //on simule l'appuie sur le bouton start
+  bouton(lave_linge_start);
   
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   
@@ -57,9 +85,6 @@ void demarrage_machine(void * parameter){
 
 
 
-
-
-//fonction de base permettant la connection de l'esp au wifi
 void setup_wifi() {
   delay(10);
   // We start by connecting to a WiFi network
@@ -83,74 +108,6 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-//fonction callback modifiée pour porter les traitement à réaliser en fonction des messages mqtt reçus
-void callback(char* topic, byte* payload, unsigned int length) {
-
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  String message = "";
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-    message += (char)payload[i];
-  }
-  Serial.println();
-
-  if (String(topic).equals("commande") == 1) {
-    //lave linge
-    if (message.indexOf("{\"idx\" : 1") != -1 ) {
-      Serial.println("Lave linge");
-      if (message.indexOf("\"nvalue\" : 3") != -1) {
-        //on allume la prise de la machine
-        digitalWrite(lave_linge_power, HIGH);
-        delay(5000);
-        bouton(lave_linge_start);
-      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
-        //on éteint la prise de la machine
-        digitalWrite(lave_linge_power, LOW);
-      }
-    }
-    //lave vaisselle
-    else if (message.indexOf("{\"idx\" : 2") != -1 ) {
-      if (message.indexOf("\"nvalue\" : 3") != -1) {
-        //on allume la prise du lave vaisselle
-        digitalWrite(lave_vaisselle_power, HIGH);
-        delay(5000);
-
-        //réinitialisation de lave vaisselle si l'ancien programme ne s'est pas fini
-        bouton(lave_vaisselle_select, 5000);
-        delay(1000);
-        
-        //séquence de lancement du lave vaisselle select et demi charge
-        bouton(lave_vaisselle_select);
-        delay(500);
-        bouton(lave_vaisselle_demi_charge);
-      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
-        //on éteint la prise du lave vaisselle
-        digitalWrite(lave_vaisselle_power, LOW);
-      }
-    }
-    //Four
-    else if (message.indexOf("{\"idx\" : 3") != -1 ) {
-      if (message.indexOf("\"nvalue\" : 1") != -1) {
-        Serial.print("four on");
-        digitalWrite(PLAQUE, HIGH);
-      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
-        Serial.print("four off");
-        digitalWrite(PLAQUE, LOW);
-      }
-    }
-    //Plaque
-    else if (message.indexOf("{\"idx\" : 4") != -1 ) {
-      if (message.indexOf("\"nvalue\" : 1") != -1) {
-        digitalWrite(FOUR, HIGH);
-      } else if (message.indexOf("\"nvalue\":0") != -1) {
-        digitalWrite(FOUR, LOW);
-      }
-    }
-  }
-
-}
 
 void reconnect() {
   // Loop until we're reconnected
@@ -176,6 +133,82 @@ void reconnect() {
   }
 }
 
+
+
+//fonction callback modifiée pour porter les traitement à réaliser en fonction des messages mqtt reçus
+void callback(char* topic, byte* payload, unsigned int length) {
+
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  String message = "";
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+    message += (char)payload[i];
+  }
+  Serial.println();
+
+  if (String(topic).equals("commande") == 1) {
+    //lave linge
+    if (message.indexOf("{\"idx\" : 1") != -1 ) {
+      if (message.indexOf("\"nvalue\" : 3") != -1) {
+        xTaskCreatePinnedToCore(
+          demarrage_machine,    // Function that should be called
+          "demarrage_machine",   // Name of the task (for debugging)
+          5000,            // Stack size (bytes)
+          NULL,            // Parameter to pass
+          1,               // Task priority
+          NULL,             // Task handle
+          1          // Core you want to run the task on (0 or 1)
+        );
+      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
+        //on éteint la prise de la machine
+        digitalWrite(lave_linge_power, LOW);
+        client.publish("commande", "extinction machine");
+      }
+    }
+    
+    //lave vaisselle
+    else if (message.indexOf("{\"idx\" : 2") != -1 ) {
+      if (message.indexOf("\"nvalue\" : 3") != -1) {
+        xTaskCreatePinnedToCore(
+          demarrage_lave_vaisselle,    // Function that should be called
+          "demarrage_lave_vaisselle",   // Name of the task (for debugging)
+          5000,            // Stack size (bytes)
+          NULL,            // Parameter to pass
+          1,               // Task priority
+          NULL,             // Task handle
+          1          // Core you want to run the task on (0 or 1)
+        );
+
+      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
+        //on éteint la prise du lave vaisselle
+        digitalWrite(lave_vaisselle_power, LOW);
+        client.publish("commande", "extinction lave vaiselle");
+      }
+    }
+    
+    //Four
+    else if (message.indexOf("{\"idx\" : 3") != -1 ) {
+      if (message.indexOf("\"nvalue\" : 1") != -1) {
+        Serial.print("four on");
+        digitalWrite(PLAQUE, HIGH);
+      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
+        Serial.print("four off");
+        digitalWrite(PLAQUE, LOW);
+      }
+    }
+    
+    //Plaque
+    else if (message.indexOf("{\"idx\" : 4") != -1 ) {
+      if (message.indexOf("\"nvalue\" : 1") != -1) {
+        digitalWrite(FOUR, HIGH);
+      } else if (message.indexOf("\"nvalue\":0") != -1) {
+        digitalWrite(FOUR, LOW);
+      }
+    }
+  }
+}
 
 
 void setup() {
@@ -206,21 +239,9 @@ void setup() {
 }
 
 void loop() {
+  //Serial.println(!client.connected());
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
-
-  //voir comment faire pour boucler et attendre un peu évitant au microcontrolleur de tourner à fond dans le vide vérifiant juste si la connection est fonctionnelle
-  // par exemple une vérification toutes les 10 secondes sans pour autant mettre un delay qui bloque le microcontroleur pendant ce temps
-  unsigned long now = millis();
-  //  if (now - lastMsg > 200000) {
-  //    Serial.println("boucle");
-  //    lastMsg = now;
-  //    ++value;
-  //    snprintf (msg, MSG_BUFFER_SIZE, "hello world #%ld", value);
-  //    Serial.print("Publish message: ");
-  //    Serial.println(msg);
-  //    client.publish("outTopic", msg);
-  //  }
 }
