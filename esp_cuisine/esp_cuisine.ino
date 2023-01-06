@@ -20,15 +20,43 @@ char msg[MSG_BUFFER_SIZE];
 int value = 0;
 
 
+/**********************************************************************************
+ * SECTION DES FONCTIONS
+ *********************************************************************************/
+
 //fonction permettant de simuler l'appuie sur un bouton en activant pendant 600 ms une sortie du contrôleur.
 //la sortie doit être raccordée sur un relais qui permet de ferme le circuit du bouton à commander
 // input : int port : correspond au numéro du port arduino à activer
 // output : none
 void bouton(int port, int temps=500) {
   digitalWrite(port, HIGH);
-  delay(temps);
+  vTaskDelay(temps / portTICK_PERIOD_MS);
   digitalWrite(port, LOW);
 }
+
+
+void demarrage_machine(void * parameter){
+  //on allume la prise du lave vaisselle
+  digitalWrite(lave_vaisselle_power, HIGH);
+  vTaskDelay(5000 / portTICK_PERIOD_MS);
+  
+  //réinitialisation de lave vaisselle si l'ancien programme ne s'est pas fini
+  bouton(lave_vaisselle_select, 5000);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  
+  //séquence de lancement du lave vaisselle select et demi charge
+  bouton(lave_vaisselle_select);
+  vTaskDelay(500 / portTICK_PERIOD_MS);
+  bouton(lave_vaisselle_demi_charge);
+  
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  
+  // When you're done, call vTaskDelete. Don't forget this!
+  vTaskDelete(NULL);
+}
+
+
+
 
 
 //fonction de base permettant la connection de l'esp au wifi
