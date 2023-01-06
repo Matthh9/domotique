@@ -115,9 +115,9 @@ void reconnect() {
     Serial.print("Attempting MQTT connection...");
     // Create a random client ID
     String clientId = "ESP8266Client-";
-    clientId += String(random(0xffff), HEX);
+    clientId += String(WiFi.localIP());
     // Attempt to connect
-    if (client.connect("1", USER, PASSWORD)) {
+    if (client.connect(clientId.c_str(), USER, PASSWORD)) {
       Serial.println("connected");
       // ... and resubscribe
       for (int i = 0; i < taileTopics; i++) {
@@ -150,7 +150,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   if (String(topic).equals("commande") == 1) {
     //lave linge
-    if (message.indexOf("{\"idx\" : 1") != -1 ) {
+    if (message.indexOf("{\"idx\" : 1,") != -1 ) {
       if (message.indexOf("\"nvalue\" : 3") != -1) {
         xTaskCreatePinnedToCore(
           demarrage_machine,    // Function that should be called
@@ -169,7 +169,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
     
     //lave vaisselle
-    else if (message.indexOf("{\"idx\" : 2") != -1 ) {
+    else if (message.indexOf("{\"idx\" : 2,") != -1 ) {
       if (message.indexOf("\"nvalue\" : 3") != -1) {
         xTaskCreatePinnedToCore(
           demarrage_lave_vaisselle,    // Function that should be called
@@ -189,7 +189,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
     
     //Four
-    else if (message.indexOf("{\"idx\" : 3") != -1 ) {
+    else if (message.indexOf("{\"idx\" : 3,") != -1 ) {
       if (message.indexOf("\"nvalue\" : 1") != -1) {
         Serial.print("four on");
         digitalWrite(PLAQUE, HIGH);
@@ -200,7 +200,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
     
     //Plaque
-    else if (message.indexOf("{\"idx\" : 4") != -1 ) {
+    else if (message.indexOf("{\"idx\" : 4,") != -1 ) {
       if (message.indexOf("\"nvalue\" : 1") != -1) {
         digitalWrite(FOUR, HIGH);
       } else if (message.indexOf("\"nvalue\":0") != -1) {

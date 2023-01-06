@@ -23,11 +23,10 @@ int BRIGHTNESS=255;
 CRGB leds[NUM_LEDS];
 
 
-/**
+/**********************************************************************************
  * SECTION DES FONCTIONS
- */
+ *********************************************************************************/
 void sonnette(void * parameter){
-    // Implement your custom logic here
     // Change this depending on where you put your piezo buzzer
     const int TONE_OUTPUT_PIN = 26;
     
@@ -52,44 +51,6 @@ void sonnette(void * parameter){
       4, -4, 8, 4, 
       2, 4, -2, -2,
     };
-
-//    // notes of the moledy followed by the duration.
-//// a 4 means a quarter note, 8 an eighteenth , 16 sixteenth, so on
-//// !!negative numbers are used to represent dotted notes,
-//// so -4 means a dotted quarter note, that is, a quarter plus an eighteenth!!
-//int melody[] = {
-//
-//
-//  // Hedwig's theme fromn the Harry Potter Movies
-//  // Socre from https://musescore.com/user/3811306/scores/4906610
-//  
-//  REST, 2, NOTE_D4, 4,
-//  NOTE_G4, -4, NOTE_AS4, 8, NOTE_A4, 4,
-//  NOTE_G4, 2, NOTE_D5, 4,
-//  NOTE_C5, -2, 
-//  NOTE_A4, -2,
-//  NOTE_G4, -4, NOTE_AS4, 8, NOTE_A4, 4,
-//  NOTE_F4, 2, NOTE_GS4, 4,
-//  NOTE_D4, -1, 
-//  NOTE_D4, 4,
-//
-//  NOTE_G4, -4, NOTE_AS4, 8, NOTE_A4, 4, //10
-//  NOTE_G4, 2, NOTE_D5, 4,
-//  NOTE_F5, 2, NOTE_E5, 4,
-//  NOTE_DS5, 2, NOTE_B4, 4,
-//  NOTE_DS5, -4, NOTE_D5, 8, NOTE_CS5, 4,
-//  NOTE_CS4, 2, NOTE_B4, 4,
-//  NOTE_G4, -1,
-//  NOTE_AS4, 4,
-//     
-//  NOTE_D5, 2, NOTE_AS4, 4,//18
-//  NOTE_D5, 2, NOTE_AS4, 4,
-//  NOTE_DS5, 2, NOTE_D5, 4,
-//  NOTE_CS5, 2, NOTE_A4, 4,
-//  NOTE_AS4, -4, NOTE_D5, 8, NOTE_CS5, 4,
-//  NOTE_CS4, 2, NOTE_D4, 4,
-//  NOTE_D5, -1, 
-//  REST,4, NOTE_AS4,4,  
 
     int notes = sizeof(notemusique) / sizeof(notemusique[0]);
 
@@ -270,9 +231,9 @@ void reconnect() {
     Serial.print("Attempting MQTT connection...");
     // Create a random client ID
     String clientId = "ESP8266Client-";
-    clientId += String(random(0xffff), HEX);
+    clientId += String(WiFi.localIP());
     // Attempt to connect
-    if (client.connect("1", USER, PASSWORD)) {
+    if (client.connect(clientId.c_str(), USER, PASSWORD)) {
       Serial.println("connected");
       // ... and resubscribe
       for (int i = 0; i < taileTopics; i++) {
@@ -393,8 +354,6 @@ void setup() {
 }
 
 void loop() {
-  //Serial.println("LOOP");
-  
    //put your main code here, to run repeatedly:
   if (!client.connected()) {
     reconnect();
