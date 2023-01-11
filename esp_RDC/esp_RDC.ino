@@ -23,6 +23,9 @@ int BRIGHTNESS=255;
 CRGB leds[NUM_LEDS];
 
 
+#define port_sonnette 12
+
+
 /**********************************************************************************
  * SECTION DES FONCTIONS
  *********************************************************************************/
@@ -84,6 +87,9 @@ void sonnette(void * parameter){
     }
 
     ledcDetachPin(TONE_OUTPUT_PIN);
+    
+    //envoie d'un message mqtt pour
+    
     
     // When you're done, call vTaskDelete. Don't forget this!
     vTaskDelete(NULL);
@@ -174,35 +180,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if (message.indexOf("{\"idx\" : 3") != -1 ) {
       Serial.println("sonette");
       if (message.indexOf("\"nvalue\" : 1") != -1) {
-        //on allume la prise de la machine
-        //digitalWrite(lave_linge_power, HIGH);
-
         
-        xTaskCreatePinnedToCore(
-            sonnette,    // Function that should be called
-            "sonette",   // Name of the task (for debugging)
-            1000,            // Stack size (bytes)
-            NULL,            // Parameter to pass
-            1,               // Task priority
-            NULL,             // Task handle
-            1          // Core you want to run the task on (0 or 1)
-          );
-        
-        //delay(5000);
-        //bouton(lave_linge_start);
       } else if (message.indexOf("\"nvalue\" : 0") != -1) {
-        //on éteint la prise de la machine
-        //digitalWrite(lave_linge_power, LOW);
       }
     }
 
     if (message.indexOf("{\"idx\" : 4") != -1 ) {
       Serial.println("Projo");
       if (message.indexOf("\"nvalue\" : 1") != -1) {
-        //on allume la prise de la machine
-        //digitalWrite(lave_linge_power, HIGH);
-
-        
+          
         xTaskCreatePinnedToCore(
             demarrage_projo,    // Function that should be called
             "demarrage_projo",   // Name of the task (for debugging)
@@ -213,11 +199,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
             1          // Core you want to run the task on (0 or 1)
           );
         
-        //delay(5000);
-        //bouton(lave_linge_start);
+
       } else if (message.indexOf("\"nvalue\" : 0") != -1) {
-        //on éteint la prise de la machine
-        //digitalWrite(lave_linge_power, LOW);
+
       }
     }
     
@@ -275,7 +259,7 @@ void vATask1( void * pvParameters )
 }
 
 
-// task to be delayed
+// fonction d'animation des leds
 void pride()
 {
   static uint16_t sPseudotime = 0;
@@ -362,4 +346,17 @@ void loop() {
 
   pride();
   FastLED.show();
+    
+  if(digitalRead(port_sonnette)==HIGH) {
+    client.publish("commande", "sonnette");
+    xTaskCreatePinnedToCore(
+        sonnette,    // Function that should be called
+        "sonette",   // Name of the task (for debugging)
+        1000,            // Stack size (bytes)
+        NULL,            // Parameter to pass
+        1,               // Task priority
+        NULL,             // Task handle
+        1          // Core you want to run the task on (0 or 1)
+      );
+  }
 }
