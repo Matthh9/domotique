@@ -17,15 +17,17 @@ int value = 0;
 #define DATA_PIN    14
 #define LED_TYPE    WS2811
 #define COLOR_ORDER GRB
-#define NUM_LEDS    50
+#define NUM_LEDS    23
 int BRIGHTNESS=255;
 
 CRGB leds[NUM_LEDS];
 
-#define port_sonnette 12
+#define port_sonnette 32
 #define port_piezo 26
+#define projo_power 12
+#define led_power 27
 
-bool lumiere_on_off = true;
+bool lumiere_on_off = false;
 bool sonnette_off = true;
 
 /**********************************************************************************
@@ -110,22 +112,22 @@ void demarrage_projo(void * parameter){
 //  #define APPLICATION_PIN         16 // RX2 pin
 
   digitalWrite(projo_power, HIGH);
-  vTaskDelay(5000 / portTICK_PERIOD_MS);
+  vTaskDelay(10000 / portTICK_PERIOD_MS);
 
   // Implement your custom logic here
   IrSender.begin(IR_SEND_PIN, false);// Specify send pin and enable feedback LED at default feedback LED pin
   
   uint16_t sAddress = 0x0102;
   uint8_t sCommand = 0x34;
-  uint8_t sRepeats = 0;
+  uint8_t sRepeats = 5;
   
   // Results for the first loop to: Protocol=NEC Address=0x102 Command=0x34 Raw-Data=0xCB340102 (32 bits)
   //IrSender.sendNEC(sAddress, sCommand, sRepeats);
-  IrSender.sendNECRaw(0xCB340102, sRepeats);
-  vTaskDelay(5000 / portTICK_PERIOD_MS);
-  IrSender.sendNECRaw(0xCB340102, sRepeats); //son up pour forcer l'activation bug du projo
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
-  IrSender.sendNECRaw(0xCB340102, sRepeats); //son down pour refarie l'équilibre
+  IrSender.sendNECRaw(0x57A8FF00, sRepeats); // commande allumage
+  vTaskDelay(15000 / portTICK_PERIOD_MS);
+  IrSender.sendNECRaw(0x738CFF00, sRepeats); //son up pour forcer l'activation bug du projo
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  IrSender.sendNECRaw(0x639CFF00, sRepeats); //son down pour refaire l'équilibre
 
 // When you're done, call vTaskDelete. Don't forget this!
   vTaskDelete(NULL);
@@ -147,12 +149,14 @@ void extinction_projo(void * parameter){
   
   uint16_t sAddress = 0x0102;
   uint8_t sCommand = 0x34;
-  uint8_t sRepeats = 0;
+  uint8_t sRepeats = 2;
   
   // Results for the first loop to: Protocol=NEC Address=0x102 Command=0x34 Raw-Data=0xCB340102 (32 bits)
   //IrSender.sendNEC(sAddress, sCommand, sRepeats);
-  IrSender.sendNECRaw(0xCB340102, sRepeats);
-  vTaskDelay(10000 / portTICK_PERIOD_MS);
+  IrSender.sendNECRaw(0x57A8FF00, sRepeats);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  IrSender.sendNECRaw(0x57A8FF00, sRepeats);
+  vTaskDelay(7500 / portTICK_PERIOD_MS);
   digitalWrite(projo_power, LOW);
   
 // When you're done, call vTaskDelete. Don't forget this!
@@ -200,9 +204,36 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   if (String(topic).equals("commande") == 1) {
 
-    if (message.indexOf("{\"idx\" : 1") != -1 ) {
+    //LED strip
+    if (message.indexOf("{\"idx\" : 5") != -1 ) {
+      Serial.println("LED");
+      if (message.indexOf("\"nvalue\" : 1") != -1) {
+        digitalWrite(led_power, HIGH);
+        lumiere_on_off=true;
+
+        int debut_level = message.indexOf("\"level\" :");
+        int luminosite_message = message.substring(debut_level+10,message.length()-1).toInt();
+        FastLED.setBrightness(map(luminosite_message, 1, 100, 1, 255));
+        
+      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
+        digitalWrite(led_power, LOW);
+        lumiere_on_off=false;
+      }
+    }
+    
+    //LED strip en violet
+    if (message.indexOf("{\"idx\" : 12") != -1 ) {
       Serial.println("Projo");
-      if (message.indexOf("\"nvalue\" : 3") != -1) {
+      if (message.indexOf("\"nvalue\" : 1") != -1) {
+        digitalWrite(led_power, HIGH);
+        lumiere_on_off=true;
+        client.publish("commande", "{\"idx\" : 12, \"nvalue\" : 0}");
+      }
+    }
+    
+    //projo
+    else if (message.indexOf("{\"idx\" : 8") != -1 ) {
+      if (message.indexOf("\"nvalue\" : 1") != -1) {
         xTaskCreatePinnedToCore(
           demarrage_projo,    // Function that should be called
           "demarrage_projo",   // Name of the task (for debugging)
@@ -225,10 +256,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
         );
       }
     }
-
-
-
-
   }
 }
 
@@ -305,9 +332,16 @@ void pride()
 void reconnect();
 
 void setup() {
-  pinMode(port_sonnette, OUTPUT);
-  digitalWrite(port_sonnette, LOW);
-  pinMode(port_sonnette, INPUT);
+//  pinMode(port_sonnette, OUTPUT);
+//  digitalWrite(port_sonnette, LOW);
+//  pinMode(port_sonnette, INPUT);
+
+  pinMode(projo_power , OUTPUT);
+  digitalWrite(projo_power, LOW);
+
+  pinMode(led_power , OUTPUT);
+  digitalWrite(led_power, LOW);
+
 
   // tell FastLED about the LED strip configuration
   FastLED.addLeds<LED_TYPE,DATA_PIN,COLOR_ORDER>(leds, NUM_LEDS)
@@ -324,7 +358,7 @@ void setup() {
   
 }
 
-void loop() {  
+void loop() {
   //put your main code here, to run repeatedly:
   if (!client.connected()) {
     reconnect();
@@ -335,17 +369,17 @@ void loop() {
     pride();
   }
   
-  if(digitalRead(port_sonnette)==HIGH and sonnette_off) {
-    sonnette_off=false;
-    xTaskCreatePinnedToCore(
-        sonnette,    // Function that should be called
-        "sonette",   // Name of the task (for debugging)
-        10000,            // Stack size (bytes)
-        NULL,            // Parameter to pass
-        1,               // Task priority
-        NULL,             // Task handle
-        1          // Core you want to run the task on (0 or 1)
-      );
-  }
+//  if(digitalRead(port_sonnette)==HIGH and sonnette_off) {
+//    sonnette_off=false;
+//    xTaskCreatePinnedToCore(
+//        sonnette,    // Function that should be called
+//        "sonette",   // Name of the task (for debugging)
+//        10000,            // Stack size (bytes)
+//        NULL,            // Parameter to pass
+//        1,               // Task priority
+//        NULL,             // Task handle
+//        1          // Core you want to run the task on (0 or 1)
+//      );
+//  }
   
 }

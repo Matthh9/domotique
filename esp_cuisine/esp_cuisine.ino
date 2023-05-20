@@ -18,6 +18,10 @@ int value = 0;
 #define lave_vaisselle_select 33
 #define lave_vaisselle_demi_charge 25
 
+#define velux_up 32
+#define velux_down 32
+#define velux_power 14
+
 
 
 /**********************************************************************************
@@ -31,7 +35,7 @@ int value = 0;
            (optionnel, defaut 500 ms) int temps : ms a temporiser l'activation du port si pas de 
  * output : none
 **/
-void bouton(int port, int temps=500) {
+void bouton(int port, int temps=250) {
   digitalWrite(port, HIGH);
   vTaskDelay(temps / portTICK_PERIOD_MS);
   digitalWrite(port, LOW);
@@ -52,8 +56,8 @@ void demarrage_lave_vaisselle(void * parameter){
   
   //séquence de lancement du lave vaisselle select et demi charge
   bouton(lave_vaisselle_select);
-  vTaskDelay(500 / portTICK_PERIOD_MS);
-  bouton(lave_vaisselle_demi_charge);   
+  vTaskDelay(200 / portTICK_PERIOD_MS);
+  bouton(lave_vaisselle_demi_charge, 1000);
   
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   
@@ -78,6 +82,34 @@ void demarrage_machine(void * parameter){
   bouton(lave_linge_start);
   
   vTaskDelay(1000 / portTICK_PERIOD_MS);
+  
+  // When you're done, call vTaskDelete. Don't forget this!
+  vTaskDelete(NULL);
+}
+
+
+/**
+ * tache permettant d'ouvrir ou de fermer les volets des velux, appelé lors de la reception du bon message mqtt
+ * input : port a actionner si on doit ouvrir ou fermer le velux
+ * output : none
+**/
+void velux_commande(void * parameter){
+  //client.publish("commande", "demarrage machine");
+  uint32_t commande = ( ( uint32_t )  parameter );
+  Serial.print( commande );
+
+  //on allume l'alim
+  digitalWrite(velux_power, HIGH);
+  vTaskDelay(2500 / portTICK_PERIOD_MS);
+  
+  //on active le port necessaire pour lancer la commande d'ouverture ou de fermeture
+  digitalWrite(commande, HIGH);
+  vTaskDelay(60000 / portTICK_PERIOD_MS);
+  digitalWrite(commande, LOW);
+
+  //on éteint l'alim
+  digitalWrite(velux_power, LOW);
+  vTaskDelay(2500 / portTICK_PERIOD_MS);
   
   // When you're done, call vTaskDelete. Don't forget this!
   vTaskDelete(NULL);
@@ -207,6 +239,34 @@ void callback(char* topic, byte* payload, unsigned int length) {
         digitalWrite(FOUR, LOW);
       }
     }
+
+    //Volet velux
+    else if (message.indexOf("{\"idx\" : 15,") != -1 ) {
+      if (message.indexOf("\"nvalue\" : 1") != -1) {
+        client.publish("commande", "velux_up");
+        xTaskCreatePinnedToCore(
+          velux_commande,    // Function that should be called
+          "velux_commande",   // Name of the task (for debugging)
+          5000,            // Stack size (bytes)
+          ( void * ) velux_up,            // Parameter to pass
+          1,               // Task priority
+          NULL,             // Task handle
+          1          // Core you want to run the task on (0 or 1)
+        );
+        
+      } else if (message.indexOf("\"nvalue\" : 0") != -1) {
+        client.publish("commande", "velux_down");
+        xTaskCreatePinnedToCore(
+          velux_commande,    // Function that should be called
+          "velux_commande",   // Name of the task (for debugging)
+          5000,            // Stack size (bytes)
+          ( void * ) velux_down,            // Parameter to pass
+          1,               // Task priority
+          NULL,             // Task handle
+          1          // Core you want to run the task on (0 or 1)
+        );
+      }
+    }
   }
 }
 
@@ -229,6 +289,13 @@ void setup() {
   pinMode(lave_vaisselle_power, OUTPUT);
   digitalWrite(lave_vaisselle_power, LOW);
 
+  pinMode(velux_power, OUTPUT);
+  digitalWrite(velux_power, LOW);
+  pinMode(velux_up, OUTPUT);
+  digitalWrite(velux_up, LOW);
+  pinMode(velux_down, OUTPUT);
+  digitalWrite(velux_down, LOW);
+  
 
   //  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
   //  digitalWrite(BUILTIN_LED, HIGH);
