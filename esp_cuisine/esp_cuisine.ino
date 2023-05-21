@@ -10,16 +10,16 @@ unsigned long lastMsg = 0;
 char msg[MSG_BUFFER_SIZE];
 int value = 0;
 
-#define FOUR 12
-#define PLAQUE 13
+#define FOUR 36
+#define PLAQUE 39
 #define lave_linge_power 26
 #define lave_linge_start 32
 #define lave_vaisselle_power 27
 #define lave_vaisselle_select 33
 #define lave_vaisselle_demi_charge 25
 
-#define velux_up 32
-#define velux_down 32
+#define velux_down 12
+#define velux_up 13
 #define velux_power 14
 
 
@@ -104,7 +104,7 @@ void velux_commande(void * parameter){
   
   //on active le port necessaire pour lancer la commande d'ouverture ou de fermeture
   digitalWrite(commande, HIGH);
-  vTaskDelay(60000 / portTICK_PERIOD_MS);
+  vTaskDelay(45000 / portTICK_PERIOD_MS);
   digitalWrite(commande, LOW);
 
   //on éteint l'alim
@@ -243,7 +243,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     //Volet velux
     else if (message.indexOf("{\"idx\" : 15,") != -1 ) {
       if (message.indexOf("\"nvalue\" : 1") != -1) {
-        client.publish("commande", "velux_up");
+        client.publish("commande", "cuisine_velux_up");
         xTaskCreatePinnedToCore(
           velux_commande,    // Function that should be called
           "velux_commande",   // Name of the task (for debugging)
@@ -255,7 +255,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
         );
         
       } else if (message.indexOf("\"nvalue\" : 0") != -1) {
-        client.publish("commande", "velux_down");
+        client.publish("commande", "cuisine_velux_down");
         xTaskCreatePinnedToCore(
           velux_commande,    // Function that should be called
           "velux_commande",   // Name of the task (for debugging)
