@@ -6,7 +6,7 @@
 WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long lastMsg = 0;
-#define MSG_BUFFER_SIZE  (50)
+#define MSG_BUFFER_SIZE  (5000)
 char msg[MSG_BUFFER_SIZE];
 int value = 0;
 
@@ -18,10 +18,17 @@ int value = 0;
 #define lave_vaisselle_select 33
 #define lave_vaisselle_demi_charge 25
 
-#define velux_down 12
-#define velux_up 13
-#define velux_power 14
+#define volet_temps_ouverture 30000 //ouverture à 100% du volet
 
+struct Volet_velux {
+  int volet_down;
+  int volet_up;
+  int volet_power;
+  int volet_position;
+  int volet_new_position;
+};
+
+Volet_velux volet = {12, 13, 14, 0, 0};
 
 
 /**********************************************************************************
@@ -90,26 +97,48 @@ void demarrage_machine(void * parameter){
 
 /**
  * tache permettant d'ouvrir ou de fermer les volets des velux, appelé lors de la reception du bon message mqtt
- * input : port a actionner si on doit ouvrir ou fermer le velux
+ * input : structure de type Volet_velux permettant d'avoir toutes les infos sur le volet
  * output : none
 **/
-void velux_commande(void * parameter){
+void velux_commande_2(void * parameter){
   //client.publish("commande", "demarrage machine");
-  uint32_t commande = ( ( uint32_t )  parameter );
-  Serial.print( commande );
 
+  Volet_velux* packet = (Volet_velux*)parameter;
+
+  //calcul de l'action à faire
+  int temps;
+  if (packet->volet_new_position == 100){
+    temps = -volet_temps_ouverture+2000;
+  } else if (packet->volet_new_position == 0){
+    temps = volet_temps_ouverture+2000;
+  } else {
+    temps = (packet->volet_position-packet->volet_new_position)*volet_temps_ouverture/100;
+  }
+  Serial.println( temps );
+
+  int port;
+  if (temps==abs(temps)){ 
+    port = packet->volet_down ;
+  } else { port = packet->volet_up ; }
+  Serial.println( port );
+  
+  
   //on allume l'alim
-  digitalWrite(velux_power, HIGH);
+  digitalWrite(packet->volet_power, HIGH);
   vTaskDelay(2500 / portTICK_PERIOD_MS);
   
   //on active le port necessaire pour lancer la commande d'ouverture ou de fermeture
-  digitalWrite(commande, HIGH);
-  vTaskDelay(45000 / portTICK_PERIOD_MS);
-  digitalWrite(commande, LOW);
-
-  //on éteint l'alim
-  digitalWrite(velux_power, LOW);
+  digitalWrite(port, HIGH);
+  vTaskDelay(abs(temps) / portTICK_PERIOD_MS);
+  digitalWrite(port, LOW);
   vTaskDelay(2500 / portTICK_PERIOD_MS);
+  
+  //on éteint l'alim
+  digitalWrite(packet->volet_power, LOW);
+  
+
+  //on positionne la nouvelle position comme la position courante
+  packet->volet_position=packet->volet_new_position;
   
   // When you're done, call vTaskDelete. Don't forget this!
   vTaskDelete(NULL);
@@ -241,31 +270,25 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
 
     //Volet velux
-    else if (message.indexOf("{\"idx\" : 15,") != -1 ) {
+    else if (message.indexOf("{\"idx\" : 16,") != -1 ) {
       if (message.indexOf("\"nvalue\" : 1") != -1) {
-        client.publish("commande", "cuisine_velux_up");
-        xTaskCreatePinnedToCore(
-          velux_commande,    // Function that should be called
-          "velux_commande",   // Name of the task (for debugging)
-          5000,            // Stack size (bytes)
-          ( void * ) velux_up,            // Parameter to pass
-          1,               // Task priority
-          NULL,             // Task handle
-          1          // Core you want to run the task on (0 or 1)
-        );
-        
+        volet.volet_new_position = 100;
       } else if (message.indexOf("\"nvalue\" : 0") != -1) {
-        client.publish("commande", "cuisine_velux_down");
-        xTaskCreatePinnedToCore(
-          velux_commande,    // Function that should be called
-          "velux_commande",   // Name of the task (for debugging)
-          5000,            // Stack size (bytes)
-          ( void * ) velux_down,            // Parameter to pass
-          1,               // Task priority
-          NULL,             // Task handle
-          1          // Core you want to run the task on (0 or 1)
-        );
+        volet.volet_new_position = 0;
+      } else {
+        int volet_level = message.indexOf("\"level\" :");
+        int volet_new_position = message.substring(volet_level+10,message.length()-1).toInt();
+        volet.volet_new_position = volet_new_position;
       }
+      xTaskCreatePinnedToCore(
+        velux_commande_2,    // Function that should be called
+        "velux_commande",   // Name of the task (for debugging)
+        5000,            // Stack size (bytes)
+        &volet,            // Parameter to pass
+        1,               // Task priority
+        NULL,             // Task handle
+        1          // Core you want to run the task on (0 or 1)
+      );     
     }
   }
 }
@@ -289,12 +312,12 @@ void setup() {
   pinMode(lave_vaisselle_power, OUTPUT);
   digitalWrite(lave_vaisselle_power, LOW);
 
-  pinMode(velux_power, OUTPUT);
-  digitalWrite(velux_power, LOW);
-  pinMode(velux_up, OUTPUT);
-  digitalWrite(velux_up, LOW);
-  pinMode(velux_down, OUTPUT);
-  digitalWrite(velux_down, LOW);
+  pinMode(volet.volet_power, OUTPUT);
+  digitalWrite(volet.volet_power, LOW);
+  pinMode(volet.volet_up, OUTPUT);
+  digitalWrite(volet.volet_up, LOW);
+  pinMode(volet.volet_down, OUTPUT);
+  digitalWrite(volet.volet_down, LOW);
   
 
   //  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
