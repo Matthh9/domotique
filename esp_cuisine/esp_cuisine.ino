@@ -62,7 +62,7 @@ void demarrage_lave_vaisselle(void * parameter){
   vTaskDelay(5000 / portTICK_PERIOD_MS);
   
   //séquence de lancement du lave vaisselle select et demi charge
-  bouton(lave_vaisselle_select);
+  bouton(lave_vaisselle_select, 500);
   vTaskDelay(200 / portTICK_PERIOD_MS);
   bouton(lave_vaisselle_demi_charge, 1000);
   
