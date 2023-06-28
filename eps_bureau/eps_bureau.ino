@@ -11,17 +11,18 @@ char msg[MSG_BUFFER_SIZE];
 int value = 0;
 
 
-#define volet_temps_ouverture 30000 //ouverture à 100% du volet
-#define volet_power 13
+#define volet_temps_ouverture 28000 //ouverture à 100% du volet
+#define mise_route_volet 2000
 
 struct Volet_velux {
-  int volet_down;
-  int volet_up;
+  const int volet_down;
+  const int volet_up;
+  const int volet_power;
   int volet_position;
   int volet_new_position;
 };
 
-Volet_velux volet = {14, 27, 0, 0};
+Volet_velux volet = {14, 27, 13, 0, 0};
 
 
 /**********************************************************************************
@@ -55,9 +56,9 @@ void velux_commande(void * parameter){
   //calcul de l'action à faire
   int temps;
   if (packet->volet_new_position == 100){
-    temps = -volet_temps_ouverture;
+    temps = -volet_temps_ouverture+2000;
   } else if (packet->volet_new_position == 0){
-    temps = volet_temps_ouverture;
+    temps = volet_temps_ouverture+2000;
   } else {
     temps = (packet->volet_position-packet->volet_new_position)*volet_temps_ouverture/100;
   }
@@ -66,21 +67,22 @@ void velux_commande(void * parameter){
   if (temps==abs(temps)){ 
     port = packet->volet_down ;
   } else { port = packet->volet_up ; }
-  Serial.println( port );
-  
-  
+
+  temps = abs(temps)+mise_route_volet;
+  String message_log = "volet bureau ";
+
   //on allume l'alim
-  digitalWrite(volet_power, HIGH);
-  vTaskDelay(2500 / portTICK_PERIOD_MS);
+  digitalWrite(packet->volet_power, HIGH);
+  vTaskDelay(3000 / portTICK_PERIOD_MS);
   
   //on active le port necessaire pour lancer la commande d'ouverture ou de fermeture
   digitalWrite(port, HIGH);
-  vTaskDelay(abs(temps) / portTICK_PERIOD_MS);
+  vTaskDelay( temps / portTICK_PERIOD_MS);
   digitalWrite(port, LOW);
   vTaskDelay(2500 / portTICK_PERIOD_MS);
   
   //on éteint l'alim uniquement si operation vaut 0
-  digitalWrite(volet_power, LOW);
+  digitalWrite(packet->volet_power, LOW);
   
   //on positionne la nouvelle position comme la position courante
   packet->volet_position=packet->volet_new_position;
@@ -166,6 +168,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
         int volet_new_position = message.substring(volet_level+10,message.length()-1).toInt();
         volet.volet_new_position = volet_new_position;
       }
+
       xTaskCreatePinnedToCore(
         velux_commande,    // Function that should be called
         "velux_commande",   // Name of the task (for debugging)
@@ -181,8 +184,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void setup() {
-  pinMode(volet_power, OUTPUT);
-  digitalWrite(volet_power, LOW);
+  pinMode(volet.volet_power, OUTPUT);
+  digitalWrite(volet.volet_power, LOW);
   pinMode(volet.volet_up, OUTPUT);
   digitalWrite(volet.volet_up, LOW);
   pinMode(volet.volet_down, OUTPUT);
